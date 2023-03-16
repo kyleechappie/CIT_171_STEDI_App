@@ -1,5 +1,5 @@
 import React, { useEffect, useState, } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity,TextInput, Button, Alert } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity,TextInput, Button, Alert,Linking,ImageBackground} from 'react-native';
 import  Navigation from './components/Navigation';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import OnboardingScreen from './screens/OnboardingScreen';
@@ -7,6 +7,10 @@ import Home from './screens/Home';
 import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import image from './image/logo.png';
+
+import * as LocalAuthentication from 'expo-local-authentication'
+import { BottomNavigation } from 'react-native-paper';
 
 
 
@@ -23,10 +27,22 @@ const App = () =>{
   const [phoneNumber,setPhoneNumber] = React.useState("");
   const [oneTimePassword, setOneTimePassword] = React.useState("");
   const [homeTodayScore, setHomeTodayScore] = React.useState(0);
+  const [isBiometricSupported, setIsBiometricSupported] = React.useState(false);
+  cont [setIsBiometricEnrolled, setIsBiometricEnrolled] = React.useState(false);
+useEffect(() => {
+  (async() => {
+    const compatible = await LocalAuthentication.hasHardwareAsync();
+    setIsBiometricSupported(compatible);
+
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    setIsBiometricEnrolled(enrolled);
+    setIsBiometricEnrolled(enrolled);
+  })();
+})
 
   useEffect(()=>{//this is code that has to run before we show app screen
    const getSessionToken = async()=>{
-    const sessionToken = await AsyncStorage.getItem('sessionToken');
+    const sessionToken =  await AsyncStorage.getItem('sessionToken');
     console.log('sessionToken',sessionToken);
     const validateResponse = await fetch('https://dev.stedi.me/validate/'+sessionToken,
     {
@@ -52,10 +68,18 @@ return(
  
 );
   }else if(loggedInState==loggedInStates.LOGGED_IN){
-    return <Navigation/>
+    return <Navigation setLoggedInState={setLoggedInState}/>
   } else if(loggedInState==loggedInStates.NOT_LOGGED_IN){
     return (
       <View>
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text> {isBiometricSupported ? 'Your device is compatible with Biometrics'
+        :  'Your device is not compatible with Biometrics'}
+        </Text>
+
+        <Text> {setIsBiometricEnrolled ? 'You have a fingerprint or face biometric'
+        : ' You have not saved a fingerprint or face Biometric'}
+        </Text>
         <TextInput 
           value={phoneNumber}
           onChangeText={setPhoneNumber}
@@ -64,12 +88,24 @@ return(
           placeholder='Cell Phone'>          
         </TextInput>
         <Button
+        title='Biometric Authentication'
+        style={styles.button}
+        onPress={async () => {
+          const biometricAuth = await LocalAuthentication.authenticateAsync9({
+          promptMessage: 'login with Biometrics',
+          disableDeviceFallback: true,
+          cancelLabel: "Cancel"
+          });
+          console.log("biometric Auth",biometricAuth)
+        }}
+        ></Button>
+        <Button
           title='Send'
           style={styles.button}
           onPress={async ()=>{
             console.log(phoneNumber+' Button was pressed')
 
-            await fetch(
+            const sendTextResponse=await fetch(
               'https://dev.stedi.me/twofactorlogin/'+phoneNumber,
               {
                 method:'POST',
@@ -78,9 +114,15 @@ return(
                }
               }
             )
-            setLoggedInState(loggedInStates.LOGGING_IN);
+            const sendTextResponseData = await sendTextResponse.text();
+            if(sendTextResponse.status!=200){//invalid phone number, send them to the signup page
+              await Linking.openURL('https://dev.stedi.me/createcustomer.html');
+            } else{
+              setLoggedInState(loggedInStates.LOGGING_IN);
+            }
           }}
         />      
+        {/* </ImageBackground> */}
       </View>
     )
   } else if(loggedInState==loggedInStates.LOGGING_IN){
@@ -121,7 +163,7 @@ return(
               await AsyncStorage.setItem('sessionToken',sessionToken);//local storage
               setLoggedInState(loggedInStates.LOGGED_IN);
             } else{
-              console.log('response status',loginReponse.status);
+              console.log('response status',loginResponse.status);
               Alert.alert('Invalid','Invalid Login information')
               setLoggedInState(NOT_LOGGED_IN);
             }
@@ -137,13 +179,12 @@ return(
  
  const styles = StyleSheet.create({
      container:{
-         flex:1, 
          alignItems:'center',
          justifyContent: 'center'
      },
      input: {
        height: 40,
-       marginTop: 100,
+       marginTop: 35,
        borderWidth: 1,
        padding: 10,
      },
@@ -154,5 +195,20 @@ return(
        alignItems: "center",
        backgroundColor: "#DDDDDD",
        padding: 10
-     }    
+     },
+     title:{
+      textAlign:"center",
+      color:'#A0CE4E'
+      // marginTop:20
+     },
+     image: {
+      flex: 1,
+      justifyContent: 'center',
+    },     
+    tinyLogo: {
+      width: 50,
+      height: 50,
+      marginTop:100,
+      justifyContent:'center'
+    },
  })
